@@ -63,7 +63,7 @@ func main() {
 	msg, err := cmd.f(ctx, hEnv, seqNum)
 	if err != nil {
 		ctx.Log("event", "failed to handle", "error", err)
-		reportStatus(ctx, hEnv, seqNum, status.StatusError, cmd, err.Error()+msg)
+		reportStatus(ctx, hEnv, seqNum, status.StatusSuccess, cmd, err.Error()+msg)
 		os.Exit(cmd.failExitCode)
 	}
 	reportStatus(ctx, hEnv, seqNum, status.StatusSuccess, cmd, msg)
