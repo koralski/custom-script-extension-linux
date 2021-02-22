@@ -4,7 +4,8 @@ go 1.16
 
 require (
 	github.com/Azure/azure-extension-foundation v0.0.0-20190726000431-02f4f599e64a
-	github.com/Azure/azure-sdk-for-go v3.1.0-beta.0.20160802173609-87de771fcdf5+incompatible
+	github.com/Azure/azure-sdk-for-go v51.3.0+incompatible
+	github.com/Azure/go-autorest/autorest v0.11.18 // indirect
 	github.com/ahmetalpbalkan/go-httpbin v0.0.0-20200921172446-862fbad56b77
 	github.com/ahmetb/go-httpbin v0.0.0-20200921172446-862fbad56b77 // indirect
 	github.com/andybalholm/brotli v1.0.1 // indirect
@@ -17,6 +18,7 @@ require (
 	github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515 // indirect
 	github.com/pkg/errors v0.7.1-0.20160627222352-a2d6902c6d2a
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/stretchr/testify v1.1.4-0.20160615092844-d77da356e56a
 	github.com/xeipuuv/gojsonpointer v0.0.0-20151027082146-e0fe6f683076 // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20150808065054-e02fc20de94c // indirect
