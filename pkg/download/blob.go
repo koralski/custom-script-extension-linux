@@ -31,15 +31,24 @@ func (b blobDownload) GetRequest() (*http.Request, error) {
 // getURL returns publicly downloadable URL of the Azure Blob
 // by generating a URL with a temporary Shared Access Signature.
 func (b blobDownload) getURL() (string, error) {
-	cl, err := storage.NewClient(b.accountName, b.accountKey,
+	client, err := storage.NewClient(b.accountName, b.accountKey,
 		b.blob.StorageBase, storage.DefaultAPIVersion, true)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to initialize azure storage client")
 	}
 
 	// get read-only
-	sasURL, err := cl.GetBlobService().GetBlobSASURI(b.blob.Container, b.blob.Blob,
-		time.Now().UTC().Add(blobSASDuration), "r")
+	blobStorageClient := client.GetBlobService()
+	container := blobStorageClient.GetContainerReference(b.blob.Container)
+	blob := container.GetBlobReference(b.blob.Blob)
+	options := storage.BlobSASOptions{
+		BlobServiceSASPermissions: storage.BlobServiceSASPermissions{Read: true},
+		SASOptions: storage.SASOptions{
+			Expiry: time.Now().UTC().Add(blobSASDuration),
+		},
+	}
+	sasURL, err := blob.GetSASURI(options)
+
 	if err != nil {
 		return "", errors.Wrap(err, "failed to generate SAS key for blob")
 	}
