@@ -21,8 +21,9 @@ func Test_blobDownload_validateInputs(t *testing.T) {
 
 	_, err := NewBlobDownload("", "", blobutil.AzureBlobRef{}).GetRequest()
 	require.NotNil(t, err)
-	require.Contains(t, err.Error(), "failed to initialize azure storage client")
-	require.Contains(t, err.Error(), "account name required")
+	errorMessage := err.Error()
+	require.Contains(t, errorMessage, "failed to initialize azure storage client")
+	require.Contains(t, errorMessage, "azure: account name is not valid")
 
 	_, err = NewBlobDownload("account", "", blobutil.AzureBlobRef{}).GetRequest()
 	require.NotNil(t, err)
@@ -98,9 +99,9 @@ func Test_blobDownload_actualBlob(t *testing.T) {
 	base := storage.DefaultBaseURL
 
 	// Create a blob first
-	cl, err := storage.NewClient(acct, key, base, storage.DefaultAPIVersion, true)
+	client, err := storage.NewClient(acct, key, base, storage.DefaultAPIVersion, true)
 	require.Nil(t, err)
-	bs := cl.GetBlobService()
+	blobStorageClient := client.GetBlobService()
 
 	var (
 		n         = 1024 * 64
@@ -108,14 +109,17 @@ func Test_blobDownload_actualBlob(t *testing.T) {
 		container = fmt.Sprintf("run-command-test-%d", rand.New(rand.NewSource(time.Now().UnixNano())).Int63())
 		chunk     = make([]byte, n)
 	)
-	_, err = bs.DeleteContainerIfExists(container)
+
+	containerReference := blobStorageClient.GetContainerReference(container)
+	_, err = containerReference.DeleteIfExists(nil)
 	require.Nil(t, err)
-	_, err = bs.CreateContainerIfNotExists(container, storage.ContainerAccessTypePrivate)
+	_, err = containerReference.CreateIfNotExists(&storage.CreateContainerOptions{Access: storage.ContainerAccessTypePrivate})
 	require.Nil(t, err)
-	defer bs.DeleteContainer(container)
-	require.Nil(t, bs.PutAppendBlob(container, name, nil))
+	defer containerReference.Delete(nil)
+	blobReference := containerReference.GetBlobReference(name)
+	require.Nil(t, blobReference.PutAppendBlob(nil))
 	rand.Read(chunk)
-	require.Nil(t, bs.AppendBlock(container, name, chunk, nil))
+	require.Nil(t, blobReference.AppendBlock(chunk, nil))
 
 	// Get the blob via downloader
 	d := NewBlobDownload(acct, key, blobutil.AzureBlobRef{
