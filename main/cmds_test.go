@@ -78,12 +78,13 @@ func Test_checkAndSaveSeqNum(t *testing.T) {
 }
 
 func Test_runCmd_success(t *testing.T) {
+	var script = "date"
 	dir, err := ioutil.TempDir("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	err = runCmd(log.NewContext(log.NewNopLogger()), dir, &handlerSettings{
-		publicSettings: publicSettings{Source: &scriptSource{Script: "date"}},
+	err = runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlerSettings{
+		publicSettings: publicSettings{Source: &scriptSource{Script: script}},
 	})
 	require.Nil(t, err, "command should run successfully")
 
@@ -92,6 +93,13 @@ func Test_runCmd_success(t *testing.T) {
 	require.Nil(t, err, "stdout should exist")
 	_, err = os.Stat(filepath.Join(dir, "stderr"))
 	require.Nil(t, err, "stderr should exist")
+
+	// Check embedded script if saved to file
+	_, err = os.Stat(filepath.Join(dir, "script.sh"))
+	require.Nil(t, err, "script.sh should exist")
+	content, err := ioutil.ReadFile(filepath.Join(dir, "script.sh"))
+	require.Nil(t, err, "script.sh read failure")
+	require.Equal(t, script, string(content))
 }
 
 func Test_runCmd_fail(t *testing.T) {
@@ -99,7 +107,7 @@ func Test_runCmd_fail(t *testing.T) {
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 
-	err = runCmd(log.NewContext(log.NewNopLogger()), dir, &handlerSettings{
+	err = runCmd(log.NewContext(log.NewNopLogger()), dir, "", &handlerSettings{
 		publicSettings: publicSettings{Source: &scriptSource{Script: "non-existing-cmd"}},
 	})
 	require.NotNil(t, err, "command terminated with exit status")
@@ -114,7 +122,7 @@ func Test_downloadScriptUri(t *testing.T) {
 	srv := httptest.NewServer(httpbin.GetMux())
 	defer srv.Close()
 
-	err = downloadFiles(log.NewContext(log.NewNopLogger()),
+	downloadedFilePath, err := downloadScript(log.NewContext(log.NewNopLogger()),
 		dir,
 		&handlerSettings{
 			publicSettings: publicSettings{
@@ -125,6 +133,7 @@ func Test_downloadScriptUri(t *testing.T) {
 
 	// check the downloaded file
 	fp := filepath.Join(dir, "10")
+	require.Equal(t, fp, downloadedFilePath)
 	_, err = os.Stat(fp)
 	require.Nil(t, err, "%s is missing from download dir", fp)
 }

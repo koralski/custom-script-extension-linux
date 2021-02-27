@@ -90,6 +90,24 @@ func Test_blobDownload_fails_urlNotFound(t *testing.T) {
 	require.Contains(t, err.Error(), "http request failed:")
 }
 
+func Test_GetSASBlob_actualBlob(t *testing.T) {
+	sasURL := os.Getenv("AZURE_STORAGE_BLOB")
+	sasToken := os.Getenv("SASTOKEN")
+	if sasURL == "" || sasToken == "" {
+		t.Skipf("Skipping: AZURE_STORAGE_BLOB or SASTOKEN not specified to run this test")
+	}
+
+	tmpDir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	scriptFilePath, err := GetSASBlob(sasURL, sasToken, tmpDir)
+	require.Nil(t, err)
+	result, err := ioutil.ReadFile(scriptFilePath)
+	require.Nil(t, err)
+	require.True(t, len(result) > 0)
+}
+
 func Test_blobDownload_actualBlob(t *testing.T) {
 	acct := os.Getenv("AZURE_STORAGE_ACCOUNT")
 	key := os.Getenv("AZURE_STORAGE_ACCESS_KEY")

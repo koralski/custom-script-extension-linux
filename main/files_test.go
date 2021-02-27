@@ -116,12 +116,28 @@ func Test_downloadAndProcessURL(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	cfg := handlerSettings{publicSettings{}, protectedSettings{}}
-	err = downloadAndProcessURL(log.NewContext(log.NewNopLogger()), srv.URL+"/bytes/256", tmpDir, &cfg)
+	downloadedFilePath, err := downloadAndProcessURL(log.NewContext(log.NewNopLogger()), srv.URL+"/bytes/256", tmpDir, &cfg)
 	require.Nil(t, err)
 
 	fp := filepath.Join(tmpDir, "256")
+	require.Equal(t, fp, downloadedFilePath)
 	fi, err := os.Stat(fp)
 	require.Nil(t, err)
 	require.EqualValues(t, 256, fi.Size())
 	require.Equal(t, os.FileMode(0500).String(), fi.Mode().String())
+}
+
+func Test_saveScriptFile(t *testing.T) {
+	tmpDir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	var content = "echo"
+	var filePath = filepath.Join(tmpDir, "script.sh")
+	err = saveScriptFile(filePath, content)
+	require.Nil(t, err)
+	result, err := ioutil.ReadFile(filePath)
+	require.Nil(t, err)
+	require.Equal(t, content, string(result))
+
 }

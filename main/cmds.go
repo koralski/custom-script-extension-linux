@@ -16,7 +16,8 @@ import (
 )
 
 const (
-	maxScriptSize = 256 * 1024
+	maxScriptSize         = 256 * 1024
+	updateStatusInSeconds = 30
 )
 
 type cmdFunc func(ctx *log.Context, hEnv HandlerEnvironment, report *RunCommandInstanceView, extName string, seqNum int) (stdout string, stderr string, err error)
@@ -158,7 +159,8 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	}
 
 	dir := filepath.Join(dataDir, downloadDir, fmt.Sprintf("%d", seqNum))
-	if err := downloadFiles(ctx, dir, &cfg); err != nil {
+	scriptFilePath, err := downloadScript(ctx, dir, &cfg)
+	if err != nil {
 		return "", "", errors.Wrap(err, "processing file downloads failed")
 	}
 
@@ -174,7 +176,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	stdoutF, stderrF := logPaths(dir)
 
 	// Implement ticker to update extension status periodically
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(updateStatusInSeconds * time.Second)
 	done := make(chan bool)
 	go func() {
 		for {
@@ -192,7 +194,7 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 	}()
 
 	// execute the command, save its error
-	runErr := runCmd(ctx, dir, &cfg)
+	runErr := runCmd(ctx, dir, scriptFilePath, &cfg)
 
 	ticker.Stop()
 	done <- true
@@ -248,52 +250,58 @@ func checkAndSaveSeqNum(ctx log.Logger, seq int, mrseqPath string) (shouldExit b
 	return false, nil
 }
 
-// downloadFiles downloads the files specified in cfg into dir (creates if does
+// downloadScript downloads the script file specified in cfg into dir (creates if does
 // not exist) and takes storage credentials specified in cfg into account.
-func downloadFiles(ctx *log.Context, dir string, cfg *handlerSettings) error {
+func downloadScript(ctx *log.Context, dir string, cfg *handlerSettings) (string, error) {
 	// - prepare the output directory for files and the command output
 	// - create the directory if missing
 	ctx.Log("event", "creating output directory", "path", dir)
 	if err := os.MkdirAll(dir, 0700); err != nil {
-		return errors.Wrap(err, "failed to prepare output directory")
+		return "", errors.Wrap(err, "failed to prepare output directory")
 	}
 	ctx.Log("event", "created output directory")
 
 	dos2unix := 1
 
 	// - download scriptURI
+	scriptFilePath := ""
 	scriptURI := cfg.scriptURI()
 	ctx.Log("scriptUri", scriptURI)
 	if scriptURI != "" {
 		telemetry("scenario", fmt.Sprintf("source.scriptUri;dos2unix=%d", dos2unix), true, 0*time.Millisecond)
 		ctx.Log("event", "download start")
-		if err := downloadAndProcessURL(ctx, scriptURI, dir, cfg); err != nil {
+		file, err := downloadAndProcessURL(ctx, scriptURI, dir, cfg)
+		if err != nil {
 			ctx.Log("event", "download failed", "error", err)
-			return errors.Wrapf(err, "failed to download file %s", scriptURI)
+			return "", errors.Wrapf(err, "failed to download file %s", scriptURI)
 		}
+		scriptFilePath = file
 		ctx.Log("event", "download complete", "output", dir)
 	}
-	return nil
+	return scriptFilePath, nil
 }
 
 // runCmd runs the command (extracted from cfg) in the given dir (assumed to exist).
-func runCmd(ctx *log.Context, dir string, cfg *handlerSettings) (err error) {
+func runCmd(ctx *log.Context, dir string, scriptFilePath string, cfg *handlerSettings) (err error) {
 	ctx.Log("event", "executing command", "output", dir)
-	var cmd string
 	var scenario string
-	var scenarioInfo string
 
 	// If script is specified - use it directly for command
 	if cfg.script() != "" {
-		cmd = cfg.script()
-		scenario = fmt.Sprintf("public-script;%s", scenarioInfo)
+		scenario = "embedded-script"
+		// Save the script to a file
+		scriptFilePath = filepath.Join(dir, "script.sh")
+		err := saveScriptFile(scriptFilePath, cfg.script())
+		if err != nil {
+			ctx.Log("event", "failed to save script to file", "error", err, "file", scriptFilePath)
+			return errors.Wrap(err, "failed to save script to file")
+		}
 	} else if cfg.scriptURI() != "" {
 		// If scriptUri is specified then cmd should start it
-		cmd = fmt.Sprintf("%s/script.sh", dir)
 		scenario = "public-scriptUri"
 	}
 
-	ctx.Log("event", "prepare command", "cmd", cmd)
+	ctx.Log("event", "prepare command", "scriptFile", scriptFilePath)
 
 	// We need to kill previous extension process if exists before staring a new one.
 	KillPreviousExtension(ctx, pidFilePath)
@@ -304,7 +312,7 @@ func runCmd(ctx *log.Context, dir string, cfg *handlerSettings) (err error) {
 	defer DeleteCurrentPidAndStartTime(pidFilePath)
 
 	begin := time.Now()
-	err = ExecCmdInDir(ctx, cmd, dir, cfg)
+	err = ExecCmdInDir(ctx, scriptFilePath, dir, cfg)
 	elapsed := time.Now().Sub(begin)
 	isSuccess := err == nil
 

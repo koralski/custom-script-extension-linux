@@ -3,12 +3,13 @@ package download_test
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-extension-foundation/msi"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/Azure/azure-extension-foundation/msi"
 
 	"github.com/ahmetalpbalkan/go-httpbin"
 	"github.com/koralski/run-command-extension-linux/pkg/download"
