@@ -25,6 +25,10 @@ func (s handlerSettings) scriptURI() string {
 	return s.publicSettings.Source.ScriptURI
 }
 
+func (s handlerSettings) scriptSAS() string {
+	return s.protectedSettings.SourceSASToken
+}
+
 // validate makes logical validation on the handlerSettings which already passed
 // the schema validation.
 func (s handlerSettings) validate() error {

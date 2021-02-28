@@ -19,29 +19,37 @@ import (
 // downloadAndProcessURL downloads using the specified downloader and saves it to the
 // specified existing directory, which must be the path to the saved file. Then
 // it post-processes file based on heuristics.
-func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, cfg *handlerSettings) error {
-	fn, err := urlToFileName(url)
+func downloadAndProcessURL(ctx *log.Context, url, downloadDir string, cfg *handlerSettings) (string, error) {
+	fileName, err := urlToFileName(url)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if !urlutil.IsValidUrl(url) {
-		return fmt.Errorf("[REDACTED] is not a valid url")
+		return "", fmt.Errorf(url + " is not a valid url") // url does not contain SAS to se can log it
 	}
 
-	dl, err := getDownloaders(url)
+	downloadedFilePath := filepath.Join(downloadDir, fileName)
+	scriptSAS := cfg.scriptSAS()
+	if scriptSAS != "" {
+		downloadedFilePath, err = download.GetSASBlob(url, scriptSAS, downloadDir)
+	} else {
+		downloaders, err := getDownloaders(url)
+		if err == nil {
+			const mode = 0500 // we assume users download scripts to execute
+			_, err = download.SaveTo(ctx, downloaders, downloadedFilePath, mode)
+		}
+	}
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	fp := filepath.Join(downloadDir, fn)
-	const mode = 0500 // we assume users download scripts to execute
-	if _, err := download.SaveTo(ctx, dl, fp, mode); err != nil {
-		return err
+	err = postProcessFile(downloadedFilePath)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to post-process '%s'", fileName)
 	}
 
-	err = postProcessFile(fp)
-	return errors.Wrapf(err, "failed to post-process '%s'", fn)
+	return downloadedFilePath, nil
 }
 
 // getDownloader returns a downloader for the given URL based on whether the
@@ -91,4 +99,15 @@ func postProcessFile(path string) error {
 
 	err = ioutil.WriteFile(path, b, 0)
 	return errors.Wrap(os.Rename(path, path), "error writing file")
+}
+
+func saveScriptFile(filePath string, content string) error {
+	const mode = 0500 // scripts should have execute permissions
+	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, mode)
+	if err != nil {
+		return errors.Wrap(err, "failed to open file for writing: "+filePath)
+	}
+	_, err = file.WriteString(content)
+	file.Close()
+	return errors.Wrap(err, "failed to write to the file: "+filePath)
 }

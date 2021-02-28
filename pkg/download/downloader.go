@@ -2,11 +2,12 @@ package download
 
 import (
 	"fmt"
-	"github.com/koralski/run-command-extension-linux/pkg/urlutil"
 	"io"
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/koralski/run-command-extension-linux/pkg/urlutil"
 
 	"github.com/pkg/errors"
 )
@@ -18,7 +19,10 @@ type Downloader interface {
 }
 
 const (
+	// MsiDownload404ErrorString describes Msi specific error
 	MsiDownload404ErrorString = "please ensure that the blob location in the fileUri setting exists, and the specified Managed Identity has read permissions to the storage blob"
+
+	// MsiDownload403ErrorString describes Msi permission specific error
 	MsiDownload403ErrorString = "please ensure that the specified Managed Identity has read permissions to the storage blob"
 )
 
@@ -42,31 +46,31 @@ var (
 // Download retrieves a response body and checks the response status code to see
 // if it is 200 OK and then returns the response body. It issues a new request
 // every time called. It is caller's responsibility to close the response body.
-func Download(d Downloader) (int, io.ReadCloser, error) {
-	req, err := d.GetRequest()
+func Download(downloader Downloader) (int, io.ReadCloser, error) {
+	request, err := downloader.GetRequest()
 	if err != nil {
 		return -1, nil, errors.Wrapf(err, "failed to create http request")
 	}
 
-	resp, err := httpClient.Do(req)
+	response, err := httpClient.Do(request)
 	if err != nil {
 		err = urlutil.RemoveUrlFromErr(err)
 		return -1, nil, errors.Wrapf(err, "http request failed")
 	}
 
-	if resp.StatusCode == http.StatusOK {
-		return resp.StatusCode, resp.Body, nil
+	if response.StatusCode == http.StatusOK {
+		return response.StatusCode, response.Body, nil
 	}
 
-	err = fmt.Errorf("unexpected status code: actual=%d expected=%d", resp.StatusCode, http.StatusOK)
-	switch d.(type) {
+	err = fmt.Errorf("unexpected status code: actual=%d expected=%d", response.StatusCode, http.StatusOK)
+	switch downloader.(type) {
 	case *blobWithMsiToken:
-		switch resp.StatusCode {
+		switch response.StatusCode {
 		case http.StatusNotFound:
-			return resp.StatusCode, nil, errors.Wrapf(err, MsiDownload404ErrorString)
+			return response.StatusCode, nil, errors.Wrapf(err, MsiDownload404ErrorString)
 		case http.StatusForbidden:
-			return resp.StatusCode, nil, errors.Wrapf(err, MsiDownload403ErrorString)
+			return response.StatusCode, nil, errors.Wrapf(err, MsiDownload403ErrorString)
 		}
 	}
-	return resp.StatusCode, nil, err
+	return response.StatusCode, nil, err
 }
