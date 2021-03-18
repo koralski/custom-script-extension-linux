@@ -139,5 +139,4 @@ func Test_saveScriptFile(t *testing.T) {
 	result, err := ioutil.ReadFile(filePath)
 	require.Nil(t, err)
 	require.Equal(t, content, string(result))
-
 }

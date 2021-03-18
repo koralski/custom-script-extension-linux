@@ -80,11 +80,7 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 	}
 
 	// Extract the file name only
-	fileName := ""
-	s := strings.Split(bloburl.Path, "/")
-	if len(s) > 0 {
-		fileName = s[len(s)-1]
-	}
+	fileName := getFileName(blobURI)
 	if fileName == "" {
 		return "", fmt.Errorf("cannot extract file name from URL: %q", blobURI)
 	}
@@ -111,4 +107,41 @@ func GetSASBlob(blobURI, blobSas, targetDir string) (string, error) {
 		}
 	}
 	return scriptFilePath, nil
+}
+
+// CreateAppendBlob creates a reference to an append blob. If blob exists - it gets deleted first.
+func CreateAppendBlob(blobURI, blobSas string) (*storage.Blob, error) {
+
+	bloburl, err := url.Parse(blobURI)
+	if err != nil {
+		return nil, err
+	}
+	bloburl.RawQuery = blobSas
+
+	containerRef, err := storage.GetContainerReferenceFromSASURI(*bloburl)
+	if err != nil {
+		return nil, err
+	}
+
+	fileName := getFileName(blobURI)
+	if fileName == "" {
+		return nil, fmt.Errorf("cannot extract file name from URL: %q", blobURI)
+	}
+
+	blobref := containerRef.GetBlobReference(fileName)
+	err = blobref.PutAppendBlob(nil) // Create the page blob
+	if err != nil {
+		return nil, err
+	}
+
+	return blobref, nil
+}
+
+// Extract the file name only from the blob uri
+func getFileName(blobURI string) string {
+	s := strings.Split(blobURI, "/")
+	if len(s) > 0 {
+		return s[len(s)-1]
+	}
+	return ""
 }

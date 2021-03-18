@@ -53,6 +53,30 @@ func Test_tailFile(t *testing.T) {
 	require.EqualValues(t, in, b)
 }
 
+func Test_getFileFromPosition(t *testing.T) {
+	tf := tempFile(t)
+	defer os.RemoveAll(tf)
+
+	// size = 100
+	in := bytes.Repeat([]byte("0123456789"), 10)
+	require.Nil(t, ioutil.WriteFile(tf, in, 0666))
+
+	// position = 0
+	b, err := getFileFromPosition(tf, 0)
+	require.Nil(t, err)
+	require.EqualValues(t, in, b)
+
+	// position(90) < size(100)
+	b, err = getFileFromPosition(tf, 90)
+	require.Nil(t, err)
+	require.EqualValues(t, []byte("0123456789"), b)
+
+	// position(100)>=size(100)
+	b, err = getFileFromPosition(tf, 100)
+	require.Nil(t, err)
+	require.Len(t, b, 0)
+}
+
 func tempFile(t *testing.T) string {
 	f, err := ioutil.TempFile("", "")
 	require.Nil(t, err, "error creating test file")

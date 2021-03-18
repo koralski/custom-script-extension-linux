@@ -152,3 +152,23 @@ func Test_blobDownload_actualBlob(t *testing.T) {
 	require.Nil(t, err)
 	require.EqualValues(t, chunk, b, "retrieved body is different body=%d chunk=%d", len(b), len(chunk))
 }
+
+func Test_blobAppend_actualBlob(t *testing.T) {
+	// Before running the test locally prepare storage account and set the following env variables:
+	// export AZURE_STORAGE_BLOB="https://atanas.blob.core.windows.net/con1/output5.txt"
+	// export SASTOKEN="sp=racwdl&st=2021-03-16T23:27:57Z&se=2022-03-18T07:27:57Z&spr=https&sv=2020-02-10&sr=c&sig=2QiTjxoux2JO5kzYQGVzaqweiPHElKQKRZ3eV1n02v4%3D"
+
+	blobURI := os.Getenv("AZURE_STORAGE_BLOB")
+	sasToken := os.Getenv("SASTOKEN")
+	if blobURI == "" || sasToken == "" {
+		t.Skipf("Skipping: AZURE_STORAGE_BLOB or SASTOKEN not specified to run this test")
+	}
+
+	blobref, err := CreateAppendBlob(blobURI, sasToken)
+	require.Nil(t, err)
+
+	err = blobref.AppendBlock([]byte("First line\n"), nil)
+	err = blobref.AppendBlock([]byte("Second line\n"), nil)
+	err = blobref.AppendBlock([]byte("Third line\n"), nil)
+	require.Nil(t, err)
+}
