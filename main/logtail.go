@@ -38,3 +38,31 @@ func tailFile(path string, max int64) ([]byte, error) {
 	b, err := ioutil.ReadAll(io.LimitReader(f, max))
 	return b, errors.Wrap(err, "error reading from file")
 }
+
+func getFileFromPosition(path string, position int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil && os.IsNotExist(err) {
+		return nil, nil
+	} else if err != nil {
+		return nil, errors.Wrap(err, "error opening file")
+	}
+	defer f.Close()
+
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, errors.Wrap(err, "error retrieving file info")
+	}
+	size := fi.Size()
+	if position >= size {
+		// No content after position
+		return make([]byte, 0), nil
+	}
+
+	_, err = f.Seek(position, io.SeekStart)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error seeking file: %s, offset=%d", path, position)
+	}
+
+	b, err := ioutil.ReadAll(io.LimitReader(f, size-position))
+	return b, errors.Wrap(err, "error reading from file: "+path)
+}

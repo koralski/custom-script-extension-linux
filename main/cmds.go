@@ -11,7 +11,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/go-kit/kit/log"
+	"github.com/koralski/run-command-extension-linux/pkg/download"
 	"github.com/pkg/errors"
 )
 
@@ -173,6 +175,24 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 		reportInstanceView(ctx, h, extName, seqNum, statusToReport, cmd{nil, "Enable", true, nil, 3}, report)
 	}
 
+	var outputBlobRef *storage.Blob = nil
+	outputFilePosition := int64(0)
+	if cfg.OutputBlobURI != "" && cfg.protectedSettings.OutputBlobSASToken != "" {
+		outputBlobRef, err = download.CreateAppendBlob(cfg.OutputBlobURI, cfg.protectedSettings.OutputBlobSASToken)
+		if err != nil {
+			ctx.Log("message", "error creating output blob", "error", err)
+		}
+	}
+
+	var errorBlobRef *storage.Blob = nil
+	errorFilePosition := int64(0)
+	if cfg.ErrorBlobURI != "" && cfg.protectedSettings.ErrorBlobSASToken != "" {
+		errorBlobRef, err = download.CreateAppendBlob(cfg.ErrorBlobURI, cfg.protectedSettings.ErrorBlobSASToken)
+		if err != nil {
+			ctx.Log("message", "error creating error blob", "error", err)
+		}
+	}
+
 	stdoutF, stderrF := logPaths(dir)
 
 	// Implement ticker to update extension status periodically
@@ -189,6 +209,8 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 				report.Output = stdoutTail
 				report.Error = stderrTail
 				reportInstanceView(ctx, h, extName, seqNum, statusToReport, cmd{nil, "Enable", true, nil, 3}, report)
+				outputFilePosition, err = reportOutputToBlob(stdoutF, outputBlobRef, outputFilePosition)
+				errorFilePosition, err = reportOutputToBlob(stderrF, errorBlobRef, errorFilePosition)
 			}
 		}
 	}()
@@ -211,9 +233,32 @@ func enable(ctx *log.Context, h HandlerEnvironment, report *RunCommandInstanceVi
 		ctx.Log("event", "enable script failed")
 	}
 
+	// Report the output streams to blobs
+	outputFilePosition, err = reportOutputToBlob(stdoutF, outputBlobRef, outputFilePosition)
+	errorFilePosition, err = reportOutputToBlob(stderrF, errorBlobRef, errorFilePosition)
+
 	// Always report nil for error because extension should not fail if script throws error
 	// Execution error still will be reported in the error stream
 	return stdoutTail, stderrTail, nil
+}
+
+// reportOutputToBlob save a file (from seeking position to the end of the file) to append blob. Returns the new position (end of the file)
+func reportOutputToBlob(sourceFilePath string, outputBlobRef *storage.Blob, outputFilePosition int64) (int64, error) {
+	var err error = nil
+	if outputBlobRef != nil {
+		// Save to blob
+		newOutput, err := getFileFromPosition(sourceFilePath, outputFilePosition)
+		if err == nil {
+			newOutputSize := len(newOutput)
+			if newOutputSize > 0 {
+				err = outputBlobRef.AppendBlock(newOutput, nil)
+				if err == nil {
+					outputFilePosition += int64(newOutputSize)
+				}
+			}
+		}
+	}
+	return outputFilePosition, err
 }
 
 func getOutput(ctx *log.Context, stdoutFileName string, stderrFileName string) (string, string) {
