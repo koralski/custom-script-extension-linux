@@ -25,6 +25,9 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 	defer stdout.Close()
 	defer stderr.Close()
 
+	commandArgs, err := SetEnvironmentVariables(cfg)
+	cmd = cmd + commandArgs // Add command args if any
+
 	//executionMessage := ""   // TODO: return
 	exitCode := 0 // TODO: return exit code and execution state
 	var command *exec.Cmd
@@ -57,7 +60,7 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 	command.Dir = workdir
 	command.Stdout = stdout
 	command.Stderr = stderr
-	err := command.Run()
+	err = command.Run()
 	if err != nil {
 		exitErr, ok := err.(*exec.ExitError)
 		if ok {
@@ -74,13 +77,39 @@ func Exec(ctx *log.Context, cmd, workdir string, stdout, stderr io.WriteCloser, 
 	return exitCode, errors.Wrapf(err, "failed to execute command")
 }
 
+func SetEnvironmentVariables(cfg *handlerSettings) (string, error) {
+	var err error
+	commandArgs := ""
+	parameters := []parameterDefinition{}
+	if cfg.publicSettings.Parameters != nil && len(cfg.publicSettings.Parameters) > 0 {
+		parameters = cfg.publicSettings.Parameters
+	}
+	if cfg.protectedSettings.ProtectedParameters != nil && len(cfg.protectedSettings.ProtectedParameters) > 0 {
+		parameters = append(parameters, cfg.protectedSettings.ProtectedParameters...)
+	}
+
+	for i := 0; i < len(parameters); i++ {
+		name := parameters[i].Name
+		value := parameters[i].Value
+		if value != "" {
+			if name != "" { // Named parameters are set as environmental setting
+				err = os.Setenv(name, value)
+			} else { // Unnamed parameters go to command args
+				commandArgs += " " + value
+			}
+		}
+	}
+
+	return commandArgs, err // Return command args and the last error if any
+}
+
 // ExecCmdInDir executes the given command in given directory and saves output
 // to ./stdout and ./stderr files (truncates files if exists, creates them if not
 // with 0600/-rw------- permissions).
 //
 // Ideally, we execute commands only once per sequence number in run-command-handler,
 // and save their output under /var/lib/waagent/<dir>/download/<seqnum>/*.
-func ExecCmdInDir(ctx *log.Context, cmd, workdir string, cfg *handlerSettings) error {
+func ExecCmdInDir(ctx *log.Context, scriptFilePath, workdir string, cfg *handlerSettings) error {
 
 	stdoutFileName, stderrFileName := logPaths(workdir)
 
@@ -93,7 +122,7 @@ func ExecCmdInDir(ctx *log.Context, cmd, workdir string, cfg *handlerSettings) e
 		return errors.Wrapf(err, "failed to open stderr file")
 	}
 
-	_, err = Exec(ctx, cmd, workdir, outF, errF, cfg)
+	_, err = Exec(ctx, scriptFilePath, workdir, outF, errF, cfg)
 
 	return err
 }

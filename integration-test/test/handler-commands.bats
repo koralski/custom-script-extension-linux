@@ -9,6 +9,32 @@ setup(){
 teardown(){
     rm -rf "$certs_dir"
 }
+@test "multiconfig: passing parameters" {
+    # export ConfigExtensionName=extname && export ConfigSequenceNumber=99 will be read from the extension to determine the settings file name
+    mk_container sh -c "fake-waagent install && fake-waagent enable extname 99 && wait-for-enable "
+    push_settings '
+    {
+        "source": {
+            "script": "echo $@; echo $Variable1 $Variable2"
+        },
+        "parameters" : [
+            {"Name": "", "Value": "arg0"},
+            {"Name": "Variable1", "Value": "value1"}
+        ]
+    }' '{
+        "protectedParameters" : [
+            {"Name": "", "Value": "arg1"},
+            {"Name": "Variable2", "Value": "value2"}
+        ]
+    }' 'extname.99.settings'
+    run start_container
+    echo "$output"
+
+    # Validate contents of stdout/stderr files
+    stdout="$(container_read_file /var/lib/waagent/run-command-handler/download/extname/99/stdout)"
+    echo "stdout=$stdout" && [[ "$stdout" = *"arg0 arg1"* ]]
+    echo "stdout=$stdout" && [[ "$stdout" = *"value1 value2"* ]]
+}
 
 @test "multiconfig: partial status report" {
     # export ConfigExtensionName=extname && export ConfigSequenceNumber=5 will be read from the extension to determine the settings file name
