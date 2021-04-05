@@ -68,6 +68,16 @@ func TestExec_failure_timeout(t *testing.T) {
 // 	require.Equal(t, "runcommand\n", string(o.b.Bytes()))
 // }
 
+func TestExec_SetEnvironmentVariables(t *testing.T) {
+	cfg := handlerSettings{publicSettings{Parameters: []parameterDefinition{{Name: "Variable1", Value: "value1"}, {Name: "", Value: "arg1"}}},
+		protectedSettings{ProtectedParameters: []parameterDefinition{{Name: "Variable2", Value: "value2"}, {Name: "", Value: "arg2"}}}}
+	commandArgs, err := SetEnvironmentVariables(&cfg)
+	require.Nil(t, err)
+	require.Equal(t, commandArgs, " arg1 arg2")
+	require.Equal(t, "value1", os.Getenv("Variable1"))
+	require.Equal(t, "value2", os.Getenv("Variable2"))
+}
+
 func TestExec_failure_genericError(t *testing.T) {
 	_, err := Exec(testContext, "date", "/non-existing-path", new(mockFile), new(mockFile), &testHandlerSettings)
 	require.NotNil(t, err)
